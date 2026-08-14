@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Enlarger — Image Upscaler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void: #12100d;
+    --panel: #1c1916;
+    --panel-2: #232019;
+    --line: #3a342c;
+    --line-soft: #2a2620;
+    --paper: #ede7da;
+    --ink: #ede7da;
+    --ink-dim: #9c9384;
+    --amber: #e8a33d;
+    --amber-dim: #6b5326;
+    --cyan: #7fd6c4;
+    --radius: 3px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--void);
+    background-image:
+      radial-gradient(ellipse at 20% -10%, rgba(232,163,61,0.06), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:48px 24px 80px;}
+
+  /* ---- header ---- */
+  header{margin-bottom:36px; border-bottom:1px solid var(--line); padding-bottom:24px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--amber);
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:14px;
+  }
+  .eyebrow::before{content:''; width:6px; height:6px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px 2px rgba(232,163,61,.6);}
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:500;
+    font-optical-sizing:auto;
+    font-size:42px;
+    line-height:1.05;
+    margin:0 0 10px;
+    letter-spacing:-.01em;
+  }
+  h1 em{font-style:italic; font-weight:300; color:var(--ink-dim);}
+  .sub{color:var(--ink-dim); font-size:14.5px; line-height:1.6; max-width:56ch;}
+
+  /* ---- drop zone (hero) ---- */
+  .dropzone{
+    display:block;
+    position:relative;
+    border:1px dashed var(--line);
+    border-radius:var(--radius);
+    padding:56px 24px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .2s, background .2s;
+    background:var(--panel);
+    margin-bottom:28px;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--amber);
+    background:linear-gradient(180deg, rgba(232,163,61,0.05), var(--panel));
+  }
+  .dropzone .glyph{
+    width:44px; height:44px; margin:0 auto 18px;
+    border:1px solid var(--amber-dim);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--amber);
+  }
+  .dropzone .prompt{font-size:15px; margin-bottom:6px;}
+  .dropzone .prompt b{color:var(--paper); font-weight:600;}
+  .dropzone .hint{font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-dim); letter-spacing:.02em;}
+  input[type=file]{display:none;}
+
+  /* ---- panel (post-upload) ---- */
+  .panel{
+    display:none;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--panel);
+    margin-bottom:28px;
+    overflow:hidden;
+  }
+  .panel.show{display:block;}
+
+  .readout{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px;
+    border-bottom:1px solid var(--line);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    flex-wrap:wrap; gap:10px;
+  }
+  .readout .dims{display:flex; align-items:center; gap:10px; color:var(--ink-dim);}
+  .readout .dims .out{color:var(--cyan);}
+  .readout .arrow{color:var(--amber);}
+  .readout .fname{color:var(--ink-dim); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .controls{padding:22px 20px; border-bottom:1px solid var(--line);}
+  .ctrl-row{display:flex; align-items:center; gap:18px; margin-bottom:18px; flex-wrap:wrap;}
+  .ctrl-row:last-child{margin-bottom:0;}
+  .ctrl-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-dim);
+    width:110px; flex-shrink:0;
+  }
+
+  .scale-ring{display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
+  .scale-ring button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    background:transparent; color:var(--ink-dim);
+    border:none; border-right:1px solid var(--line);
+    padding:9px 16px; cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .scale-ring button:last-child{border-right:none;}
+  .scale-ring button.active{background:var(--amber); color:#1a1408; font-weight:600;}
+  .scale-ring button:hover:not(.active){background:var(--panel-2); color:var(--paper);}
+
+  input[type=number].custom-scale{
+    width:64px; background:var(--void); border:1px solid var(--line); color:var(--paper);
+    font-family:'IBM Plex Mono', monospace; font-size:13px; padding:8px 8px; border-radius:var(--radius);
+  }
+
+  .slider-row{flex:1; min-width:200px; display:flex; align-items:center; gap:12px;}
+  input[type=range]{
+    flex:1; -webkit-appearance:none; height:2px; background:var(--line); outline:none; border-radius:2px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+    background:var(--amber); cursor:pointer; border:2px solid var(--void);
+    box-shadow:0 0 0 1px var(--amber);
+  }
+  .slider-val{font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--cyan); width:38px; text-align:right;}
+
+  .checkline{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-dim); cursor:pointer;}
+  .checkline input{accent-color:var(--amber); width:14px; height:14px;}
+
+  .warn{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--amber);
+    padding:10px 20px; background:rgba(232,163,61,0.07); border-bottom:1px solid var(--line);
+    display:none;
+  }
+  .warn.show{display:block;}
+
+  /* ---- preview / compare ---- */
+  .preview-wrap{padding:20px; border-bottom:1px solid var(--line);}
+  .compare{
+    position:relative; width:100%; overflow:hidden; border-radius:var(--radius);
+    border:1px solid var(--line-soft); background:
+      repeating-conic-gradient(#211d18 0% 25%, #17140f 0% 50%) 50% / 20px 20px;
+    max-height:520px; display:flex; align-items:center; justify-content:center;
+  }
+  .compare img{display:block; max-width:100%; max-height:520px; width:auto; height:auto; user-select:none; pointer-events:none;}
+  .compare .after-layer{position:absolute; top:0; left:0; height:100%; overflow:hidden; display:flex; align-items:center; justify-content:center;}
+  .compare .after-layer img{max-height:520px;}
+  .compare .divider{
+    position:absolute; top:0; bottom:0; width:2px; background:var(--amber);
+    box-shadow:0 0 10px rgba(232,163,61,.7); cursor:ew-resize;
+  }
+  .compare .handle{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:32px; height:32px; border-radius:50%; background:var(--amber);
+    display:flex; align-items:center; justify-content:center; cursor:ew-resize;
+    box-shadow:0 2px 10px rgba(0,0,0,.4);
+  }
+  .compare .tag{
+    position:absolute; top:10px; font-family:'IBM Plex Mono', monospace; font-size:10px;
+    letter-spacing:.1em; text-transform:uppercase; padding:4px 8px; border-radius:2px;
+    background:rgba(18,16,13,.75); color:var(--ink-dim); border:1px solid var(--line);
+  }
+  .compare .tag.before{left:10px;}
+  .compare .tag.after{right:10px; color:var(--cyan); border-color:rgba(127,214,196,.3);}
+
+  .progress-row{padding:20px; display:none; align-items:center; gap:12px; border-bottom:1px solid var(--line);}
+  .progress-row.show{display:flex;}
+  .progress-track{flex:1; height:3px; background:var(--line); border-radius:2px; overflow:hidden;}
+  .progress-fill{height:100%; width:0%; background:var(--amber); transition:width .15s;}
+  .progress-label{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-dim); white-space:nowrap;}
+
+  /* ---- export ---- */
+  .export-row{padding:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;}
+  .fmt-group{display:flex; align-items:center; gap:14px;}
+  .fmt-group label{font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-dim); display:flex; align-items:center; gap:6px; cursor:pointer;}
+  .fmt-group input{accent-color:var(--amber);}
+  button.primary{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:13px; letter-spacing:.04em;
+    background:var(--amber); color:#1a1408; border:none; padding:12px 22px; border-radius:var(--radius);
+    cursor:pointer; transition:filter .15s;
+  }
+  button.primary:hover{filter:brightness(1.1);}
+  button.primary:disabled{opacity:.4; cursor:not-allowed;}
+
+  button.ghost{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:13px; letter-spacing:.04em;
+    background:transparent; color:var(--cyan); border:1px solid var(--cyan); padding:11px 20px; border-radius:var(--radius);
+    cursor:pointer; transition:background .15s;
+  }
+  button.ghost:hover{background:rgba(127,214,196,.08);}
+  button.ghost:disabled{opacity:.4; cursor:not-allowed;}
+
+  .profile-block{
+    padding:20px; border-top:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
+  }
+  .profile-block .info{max-width:44ch;}
+  .profile-block .info .label{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--cyan); margin-bottom:5px;
+  }
+  .profile-block .info p{margin:0; font-size:12.5px; color:var(--ink-dim); line-height:1.6;}
+  .profile-status{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-dim); margin-top:8px; display:none;
+  }
+  .profile-status.show{display:block;}
+  .profile-status b{color:var(--cyan);}
+
+  footer{
+    margin-top:36px; padding-top:20px; border-top:1px solid var(--line);
+    font-size:12.5px; color:var(--ink-dim); line-height:1.7; max-width:64ch;
+  }
+  footer b{color:var(--ink);}
+
+  @media (max-width:640px){
+    h1{font-size:32px;}
+    .ctrl-label{width:100%; margin-bottom:4px;}
+    .ctrl-row{flex-direction:column; align-items:flex-start;}
+    .slider-row{width:100%;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Darkroom · Resample Bench</div>
+    <h1>Enlarger<br><em>for images that need more room.</em></h1>
+    <p class="sub">Upscales an image using progressive high-fidelity resampling — the same principle a darkroom enlarger uses: build up the size in controlled stages rather than one harsh jump, then optionally refine edges with an unsharp mask. Runs entirely in your browser; nothing is uploaded anywhere.</p>
+  </header>
+
+  <label class="dropzone" id="dropzone" for="fileInput">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="glyph">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v13m0-13 5 5m-5-5-5 5M4 19h16" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="prompt"><b>Tap to select an image</b></div>
+    <div class="hint">JPG · PNG · WEBP — processed locally, no upload</div>
+  </label>
+
+  <div class="panel" id="panel">
+    <div class="readout">
+      <span class="fname" id="fname">—</span>
+      <span class="dims"><span id="dimIn">0 × 0</span> <span class="arrow">→</span> <span class="out" id="dimOut">0 × 0</span></span>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-row">
+        <span class="ctrl-label">Scale</span>
+        <div class="scale-ring" id="scaleRing">
+          <button data-scale="2">2×</button>
+          <button data-scale="3">3×</button>
+          <button data-scale="4">4×</button>
+          <button data-scale="custom">Custom</button>
+        </div>
+        <input type="number" class="custom-scale" id="customScale" min="1.1" max="8" step="0.1" value="2" style="display:none;">
+      </div>
+
+      <div class="ctrl-row">
+        <span class="ctrl-label">Sharpen</span>
+        <div class="slider-row">
+          <input type="range" id="sharpen" min="0" max="100" value="25">
+          <span class="slider-val" id="sharpenVal">25%</span>
+        </div>
+      </div>
+
+      <div class="ctrl-row">
+        <span class="ctrl-label">&nbsp;</span>
+        <label class="checkline"><input type="checkbox" id="stepMode" checked> Progressive staged resample (recommended)</label>
+      </div>
+    </div>
+
+    <div class="warn" id="warnBox"></div>
+
+    <div class="preview-wrap">
+      <div class="compare" id="compare">
+        <div class="tag before">Original</div>
+        <div class="tag after">Upscaled</div>
+        <img id="imgBefore" src="" alt="before">
+        <div class="after-layer" id="afterLayer">
+          <img id="imgAfter" src="" alt="after">
+        </div>
+        <div class="divider" id="divider" style="left:50%;">
+          <div class="handle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1a1408" stroke-width="2.2"><path d="M8 7 4 12l4 5M16 7l4 5-4 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-row" id="progressRow">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">Resampling…</div>
+    </div>
+
+    <div class="export-row">
+      <div class="fmt-group">
+        <label><input type="radio" name="fmt" value="png" checked> PNG · lossless</label>
+        <label><input type="radio" name="fmt" value="jpeg"> JPEG · quality 95</label>
+      </div>
+      <button class="primary" id="downloadBtn" disabled>Download Result</button>
+    </div>
+
+    <div class="profile-block">
+      <div class="info">
+        <div class="label">Profile Picture Mode</div>
+        <p>Squares the image, shrinks it to a sensible avatar size, and compresses it under 1MB, ready for GitHub, socials, anywhere with an upload limit.</p>
+        <div class="profile-status" id="profileStatus"></div>
+      </div>
+      <button class="ghost" id="profileBtn" disabled>Shrink for Profile Picture</button>
+    </div>
+  </div>
+
+  <footer>
+    <b>How this works.</b> Browsers don't expose true Lanczos resampling directly, so this tool approximates it by upscaling in small controlled steps (each ≤2×) with high-quality bicubic interpolation at every stage, which preserves noticeably more detail than one large jump. The optional sharpen pass runs a light unsharp mask afterward to restore perceived edge crispness.
+    <br><br>
+    <b>Honest limits.</b> This is interpolation, not AI reconstruction — it enlarges cleanly without adding blur or blockiness, but it can't invent detail that isn't in the source (that's what generative super-resolution models do, and is a different class of tool). For genuinely soft or low-res source images, expect a clean, larger image rather than new sharpness.
+  </footer>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const panel = document.getElementById('panel');
+const fnameEl = document.getElementById('fname');
+const dimInEl = document.getElementById('dimIn');
+const dimOutEl = document.getElementById('dimOut');
+const scaleRing = document.getElementById('scaleRing');
+const customScale = document.getElementById('customScale');
+const sharpenSlider = document.getElementById('sharpen');
+const sharpenVal = document.getElementById('sharpenVal');
+const stepMode = document.getElementById('stepMode');
+const warnBox = document.getElementById('warnBox');
+const imgBefore = document.getElementById('imgBefore');
+const imgAfter = document.getElementById('imgAfter');
+const afterLayer = document.getElementById('afterLayer');
+const compare = document.getElementById('compare');
+const divider = document.getElementById('divider');
+const progressRow = document.getElementById('progressRow');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const downloadBtn = document.getElementById('downloadBtn');
+const profileBtn = document.getElementById('profileBtn');
+const profileStatus = document.getElementById('profileStatus');
+
+let sourceImage = null;
+let currentScale = 2;
+let resultCanvas = null;
+let resultBlobURL = null;
+let renderToken = 0;
+
+const MAX_DIM = 4096;        // safe per-axis limit for mobile browser canvases
+const MAX_PIXELS = 12000000; // ~12MP cap — well within mobile memory budgets, still plenty sharp
+
+// ---- file intake ----
+// dropzone is a <label for="fileInput">, so tapping it opens the native
+// picker directly — no JS-triggered .click() needed (and that was the
+// likely cause of the mobile reload bug, since some mobile webviews
+// reload embedded pages when a file dialog is opened via script rather
+// than a native label/input association).
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+// Safety net: if a file gets dropped anywhere outside the dropzone,
+// stop the browser's default behavior (which is to navigate to and
+// display that file, wiping out the whole tool).
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+function handleFile(file){
+  if (!file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    sourceImage = img;
+    fnameEl.textContent = file.name;
+    dimInEl.textContent = `${img.width} × ${img.height}`;
+    imgBefore.src = url;
+    panel.classList.add('show');
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+    scheduleRender();
+  };
+  img.src = url;
+}
+
+// ---- scale controls ----
+scaleRing.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    scaleRing.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (btn.dataset.scale === 'custom') {
+      customScale.style.display = 'inline-block';
+      currentScale = parseFloat(customScale.value) || 2;
+    } else {
+      customScale.style.display = 'none';
+      currentScale = parseFloat(btn.dataset.scale);
+    }
+    scheduleRender();
+  });
+});
+scaleRing.querySelector('[data-scale="2"]').classList.add('active');
+customScale.addEventListener('input', () => { currentScale = parseFloat(customScale.value) || 2; scheduleRender(); });
+sharpenSlider.addEventListener('input', () => { sharpenVal.textContent = sharpenSlider.value + '%'; scheduleRender(); });
+stepMode.addEventListener('change', scheduleRender);
+
+// ---- debounced render trigger ----
+let renderTimer = null;
+function scheduleRender(){
+  if (!sourceImage) return;
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(runRender, 180);
+}
+
+async function runRender(){
+  const token = ++renderToken;
+  const sw = sourceImage.width, sh = sourceImage.height;
+  let targetW = Math.round(sw * currentScale);
+  let targetH = Math.round(sh * currentScale);
+
+  warnBox.classList.remove('show');
+  let capped = false;
+  if (targetW > MAX_DIM || targetH > MAX_DIM) {
+    const ratio = Math.min(MAX_DIM/targetW, MAX_DIM/targetH);
+    targetW = Math.round(targetW*ratio); targetH = Math.round(targetH*ratio);
+    capped = true;
+  }
+  if (targetW*targetH > MAX_PIXELS) {
+    const ratio = Math.sqrt(MAX_PIXELS/(targetW*targetH));
+    targetW = Math.round(targetW*ratio); targetH = Math.round(targetH*ratio);
+    capped = true;
+  }
+  if (capped) {
+    warnBox.textContent = `Output capped to ${targetW} × ${targetH} to stay within safe memory limits on phones and tablets.`;
+    warnBox.classList.add('show');
+  }
+
+  dimOutEl.textContent = `${targetW} × ${targetH}`;
+  downloadBtn.disabled = true;
+  progressRow.classList.add('show');
+  progressFill.style.width = '10%';
+  progressLabel.textContent = 'Resampling…';
+
+  await new Promise(r => setTimeout(r, 20)); // let UI paint
+
+  try {
+    const canvas = await progressiveUpscale(sourceImage, targetW, targetH, stepMode.checked, pct => {
+      if (token !== renderToken) return;
+      progressFill.style.width = (10 + pct*70) + '%';
+    });
+    if (token !== renderToken) return;
+
+    const amount = parseInt(sharpenSlider.value, 10) / 100;
+    progressLabel.textContent = 'Sharpening…';
+    progressFill.style.width = '85%';
+    await new Promise(r => setTimeout(r, 10));
+    if (amount > 0) unsharpMask(canvas, amount);
+    if (token !== renderToken) return;
+
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Done';
+    setTimeout(() => { if (token === renderToken) progressRow.classList.remove('show'); }, 400);
+
+    resultCanvas = canvas;
+    const dataURL = canvas.toDataURL('image/png');
+    imgAfter.src = dataURL;
+    afterLayer.style.width = compare.clientWidth + 'px';
+    downloadBtn.disabled = false;
+    profileBtn.disabled = false;
+  } catch (err) {
+    if (token !== renderToken) return;
+    progressRow.classList.remove('show');
+    warnBox.textContent = 'Ran out of memory processing this image. Try a lower scale factor, or turn off sharpening.';
+    warnBox.classList.add('show');
+    downloadBtn.disabled = true;
+    profileBtn.disabled = true;
+  }
+}
+
+// ---- progressive high-quality resample ----
+function progressiveUpscale(img, targetW, targetH, staged, onProgress){
+  return new Promise(resolve => {
+    let curCanvas = document.createElement('canvas');
+    curCanvas.width = img.width; curCanvas.height = img.height;
+    let ctx = curCanvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    if (!staged) {
+      const out = document.createElement('canvas');
+      out.width = targetW; out.height = targetH;
+      const octx = out.getContext('2d');
+      octx.imageSmoothingEnabled = true;
+      octx.imageSmoothingQuality = 'high';
+      octx.drawImage(curCanvas, 0, 0, targetW, targetH);
+      onProgress(1);
+      resolve(out);
+      return;
+    }
+
+    const totalRatio = Math.max(targetW / img.width, targetH / img.height);
+    const steps = Math.max(1, Math.ceil(Math.log2(Math.max(totalRatio, 1.0001)) / Math.log2(1.8)));
+    let curW = img.width, curH = img.height;
+
+    for (let i = 1; i <= steps; i++){
+      const t = i / steps;
+      const nextW = i === steps ? targetW : Math.round(img.width + (targetW - img.width) * (1 - Math.pow(1-t, 1.6)));
+      const nextH = i === steps ? targetH : Math.round(img.height + (targetH - img.height) * (1 - Math.pow(1-t, 1.6)));
+      const stepCanvas = document.createElement('canvas');
+      stepCanvas.width = nextW; stepCanvas.height = nextH;
+      const sctx = stepCanvas.getContext('2d');
+      sctx.imageSmoothingEnabled = true;
+      sctx.imageSmoothingQuality = 'high';
+      sctx.drawImage(curCanvas, 0, 0, nextW, nextH);
+      curCanvas = stepCanvas;
+      curW = nextW; curH = nextH;
+      onProgress(i/steps);
+    }
+    resolve(curCanvas);
+  });
+}
+
+// ---- light unsharp mask ----
+function unsharpMask(canvas, amount){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const src = ctx.getImageData(0,0,w,h);
+  const data = src.data;
+  const blur = boxBlur(data, w, h, 1);
+  const strength = amount * 1.6;
+  for (let i = 0; i < data.length; i += 4){
+    for (let c = 0; c < 3; c++){
+      const orig = data[i+c];
+      const blurred = blur[i+c];
+      const diff = orig - blurred;
+      data[i+c] = clamp(orig + diff * strength);
+    }
+  }
+  ctx.putImageData(src, 0, 0);
+}
+function clamp(v){ return v < 0 ? 0 : v > 255 ? 255 : v; }
+function boxBlur(data, w, h, radius){
+  const out = new Uint8ClampedArray(data.length);
+  // horizontal pass into temp, then vertical pass into out
+  const temp = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y++){
+    for (let x = 0; x < w; x++){
+      let r=0,g=0,b=0,a=0,count=0;
+      for (let dx=-radius; dx<=radius; dx++){
+        const xx = Math.min(w-1, Math.max(0, x+dx));
+        const idx = (y*w+xx)*4;
+        r+=data[idx]; g+=data[idx+1]; b+=data[idx+2]; a+=data[idx+3]; count++;
+      }
+      const oidx=(y*w+x)*4;
+      temp[oidx]=r/count; temp[oidx+1]=g/count; temp[oidx+2]=b/count; temp[oidx+3]=a/count;
+    }
+  }
+  for (let x = 0; x < w; x++){
+    for (let y = 0; y < h; y++){
+      let r=0,g=0,b=0,a=0,count=0;
+      for (let dy=-radius; dy<=radius; dy++){
+        const yy = Math.min(h-1, Math.max(0, y+dy));
+        const idx = (yy*w+x)*4;
+        r+=temp[idx]; g+=temp[idx+1]; b+=temp[idx+2]; a+=temp[idx+3]; count++;
+      }
+      const oidx=(y*w+x)*4;
+      out[oidx]=r/count; out[oidx+1]=g/count; out[oidx+2]=b/count; out[oidx+3]=a/count;
+    }
+  }
+  return out;
+}
+
+// ---- compare slider drag ----
+let dragging = false;
+divider.addEventListener('mousedown', () => dragging = true);
+window.addEventListener('mouseup', () => dragging = false);
+window.addEventListener('mousemove', e => { if (dragging) moveDivider(e.clientX); });
+divider.addEventListener('touchstart', () => dragging = true, {passive:true});
+window.addEventListener('touchend', () => dragging = false);
+window.addEventListener('touchmove', e => { if (dragging && e.touches[0]) moveDivider(e.touches[0].clientX); }, {passive:true});
+
+function moveDivider(clientX){
+  const rect = compare.getBoundingClientRect();
+  let pct = ((clientX - rect.left) / rect.width) * 100;
+  pct = Math.max(0, Math.min(100, pct));
+  divider.style.left = pct + '%';
+  afterLayer.style.clipPath = `inset(0 0 0 ${pct}%)`;
+}
+compare.addEventListener('click', e => { if (e.target === divider || divider.contains(e.target)) return; moveDivider(e.clientX); });
+
+window.addEventListener('resize', () => {
+  if (imgAfter.src) afterLayer.style.width = compare.clientWidth + 'px';
+});
+
+// init clip
+afterLayer.style.clipPath = 'inset(0 0 0 50%)';
+
+// ---- download ----
+downloadBtn.addEventListener('click', () => {
+  if (!resultCanvas) return;
+  const fmt = document.querySelector('input[name=fmt]:checked').value;
+  const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const quality = fmt === 'jpeg' ? 0.95 : undefined;
+  resultCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const base = (fnameEl.textContent || 'image').replace(/\.[^/.]+$/, '');
+    a.href = url;
+    a.download = `${base}_upscaled_${currentScale}x.${fmt === 'jpeg' ? 'jpg' : 'png'}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, mime, quality);
+});
+
+// ---- profile picture: square crop + shrink under 1MB ----
+const TARGET_BYTES = 1000 * 1024; // stay comfortably under 1MB
+const AVATAR_MAX_SIDE = 1024;      // plenty sharp for any avatar slot
+
+profileBtn.addEventListener('click', async () => {
+  if (!resultCanvas) return;
+  profileBtn.disabled = true;
+  profileStatus.classList.add('show');
+  profileStatus.innerHTML = 'Cropping and compressing…';
+  await new Promise(r => setTimeout(r, 20));
+
+  // 1. center-crop to a square from the upscaled result
+  const src = resultCanvas;
+  const cropSize = Math.min(src.width, src.height);
+  const outSize = Math.min(cropSize, AVATAR_MAX_SIDE);
+
+  const sq = document.createElement('canvas');
+  sq.width = outSize; sq.height = outSize;
+  const sctx = sq.getContext('2d');
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = 'high';
+  const sx = (src.width - cropSize) / 2;
+  const sy = (src.height - cropSize) / 2;
+  sctx.drawImage(src, sx, sy, cropSize, cropSize, 0, 0, outSize, outSize);
+
+  // 2. try PNG first (lossless) — often fine at avatar sizes
+  let blob = await canvasToBlob(sq, 'image/png');
+  let format = 'png';
+
+  // 3. if PNG is too big, step down JPEG quality until under budget
+  if (blob.size > TARGET_BYTES) {
+    format = 'jpeg';
+    let quality = 0.92;
+    while (quality > 0.35) {
+      blob = await canvasToBlob(sq, 'image/jpeg', quality);
+      if (blob.size <= TARGET_BYTES) break;
+      quality -= 0.07;
+    }
+    // 4. still too big at low quality — shrink dimensions and retry once
+    if (blob.size > TARGET_BYTES) {
+      const smaller = document.createElement('canvas');
+      const factor = Math.sqrt(TARGET_BYTES / blob.size) * 0.95;
+      smaller.width = Math.max(128, Math.round(outSize * factor));
+      smaller.height = smaller.width;
+      const smctx = smaller.getContext('2d');
+      smctx.imageSmoothingEnabled = true;
+      smctx.imageSmoothingQuality = 'high';
+      smctx.drawImage(sq, 0, 0, smaller.width, smaller.height);
+      blob = await canvasToBlob(smaller, 'image/jpeg', 0.85);
+      sq.width = smaller.width; sq.height = smaller.height;
+    }
+  }
+
+  const kb = (blob.size / 1024).toFixed(0);
+  profileStatus.innerHTML = `Ready: <b>${sq.width} × ${sq.height}px</b>, <b>${kb}KB</b> (${format.toUpperCase()}) — well under the 1MB limit.`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const base = (fnameEl.textContent || 'image').replace(/\.[^/.]+$/, '');
+  a.href = url;
+  a.download = `${base}_profile.${format === 'jpeg' ? 'jpg' : 'png'}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+  profileBtn.disabled = false;
+});
+
+function canvasToBlob(canvas, mime, quality){
+  return new Promise(resolve => canvas.toBlob(resolve, mime, quality));
+}
+</script>
+</body>
+</html>
